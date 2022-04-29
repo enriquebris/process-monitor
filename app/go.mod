@@ -1,4 +1,4 @@
-module github.com/enriquebris/process-monitor
+module github.com/enriquebris/process-monitor/app
 
 go 1.18
 
