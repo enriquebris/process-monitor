@@ -4,6 +4,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"log"
 	"regexp"
+	"strings"
 	"sync"
 )
 
@@ -29,6 +30,11 @@ type MonitorEntry struct {
 	processes               sync.Map
 	regex                   *regexp.Regexp
 	totalAttemptsBeforeKill uint
+}
+
+func (st *MonitorEntry) Sanitize() {
+	st.NameRegex = strings.TrimSpace(st.NameRegex)
+	st.Cron = strings.TrimSpace(st.Cron)
 }
 
 // GetCronFunction returns a func() to be executed by cron
@@ -141,7 +147,9 @@ func (st *Monitor) Start() {
 	// add the entries
 	for _, entryList := range st.entryMap {
 		for i := 0; i < len(entryList); i++ {
-			st.cron.AddFunc(entryList[i].Cron, entryList[i].GetCronFunction())
+			if _, err := st.cron.AddFunc(entryList[i].Cron, entryList[i].GetCronFunction()); err != nil {
+				log.Printf("error adding cron job for %v: %v", entryList[i].NameRegex, err.Error())
+			}
 		}
 	}
 
