@@ -15,63 +15,79 @@ func processChecker(me *MonitorEntry) error {
 		return err
 	}
 
-	found := false
+	// foundPIDMp saves the PIDs of the processes that match the given MonitorEntry
+	foundPIDMp := map[int]struct{}{}
+	parentPID := 0
+	parentExecutableName := ""
 
 	// find the process
 	for i := 0; i < len(processList); i++ {
 
 		//if strings.TrimSpace(processList[i].Executable()) == me.NameRegex {
 		if me.getRegex().MatchString(strings.TrimSpace(processList[i].Executable())) {
-			// only check parent process
-			if processList[i].PPid() != 1 {
-				continue
-			}
-			found = true
+			// register the PID
+			foundPIDMp[processList[i].Pid()] = struct{}{}
 
 			processInfo, err := pidusage.GetStat(processList[i].Pid())
 			if err != nil {
 				log.Println(err)
 				continue
 			}
+			// get parent PID / executable name
+			if processList[i].PPid() == 1 {
+				parentPID = processList[i].Pid()
+			} else {
+				parentPID = processList[i].PPid()
+			}
+			parentExecutableName = processList[i].Executable()
 
-			if processInfo.CPU > me.CPUMaxLimit {
+			if processInfo.CPU >= me.CPUMaxLimit {
 				// increment total attempts
-				me.incrementAttempts()
+				me.incrementAttemptsForPID(processList[i].Pid())
 
-				log.Printf("Process %s [%v]:[%v] is using %f%% of CPU, attempt: %v", me.NameRegex, processList[i].Pid(), processList[i].PPid(), processInfo.CPU, me.getAttempts())
+				log.Printf("Process %s [%v]:[%v] is using %f%% of CPU, attempt: %v", processList[i].Executable(), processList[i].Pid(), processList[i].PPid(), processInfo.CPU, me.getAttemptsForPID(processList[i].Pid()))
 
-				if me.getAttempts() > me.TotalAttemptsBeforeKill {
-
+				if me.getAttemptsForPID(processList[i].Pid()) > me.TotalAttemptsBeforeKill {
 					if me.KillIfCPUMaxLimit {
-						if process, err := os.FindProcess(processList[i].Pid()); err == nil {
-							if err := process.Kill(); err != nil {
-								log.Printf("Failed to kill process %s, error: %v", processList[i].Executable(), err.Error())
-							} else {
-								log.Printf("Killed process %s, PID: %v", processList[i].Executable(), processList[i].Pid())
-							}
-						} else {
-							log.Printf("Failed to find process %s with PID: %v, error: %v", processList[i].Executable(), processList[i].Pid(), err.Error())
-						}
+						// kill the parent process
+						killProcess(parentPID, parentExecutableName)
 
 						// reset total attempts after killing
-						me.resetAttempts()
+						me.resetAttemptsForPID(processList[i].Pid())
 					}
 				}
 			} else {
-				if me.getAttempts() > 0 {
-					log.Printf("Reset %s [%v]:[%v], CPU: %f%%, attempt: %v", me.NameRegex, processList[i].Pid(), processList[i].PPid(), processInfo.CPU, me.getAttempts())
+				if me.getAttemptsForPID(processList[i].Pid()) > 0 {
+					log.Printf("Reset %s [%v]:[%v], CPU: %f%%, attempt: %v", processList[i].Executable(), processList[i].Pid(), processList[i].PPid(), processInfo.CPU, me.getAttempts())
 				}
 
 				// CPU usage is below the limit, reset attempts
-				me.resetAttempts()
+				me.resetAttemptsForPID(processList[i].Pid())
 			}
 		}
 
 	}
 
-	if !found {
-		me.resetAttempts()
+	// remove PID entries that are no longer running
+	me.removeAttemptsForAllPIDsNotInTheMap(foundPIDMp)
+
+	// kill the parent process if the sum of children attempts exceeds the total allowed attempts
+	if me.KillIfChildrenCPUMaxLimit && me.getAllAttempts() > me.TotalAttemptsBeforeKill {
+		log.Printf("Kill process %v, PID: %v due to sum of children attempts exceeding the total allowed attempts", parentExecutableName, parentPID)
+		killProcess(parentPID, parentExecutableName)
 	}
 
 	return nil
+}
+
+func killProcess(pid int, executableName string) {
+	if process, err := os.FindProcess(pid); err == nil {
+		if err := process.Kill(); err != nil {
+			log.Printf("Failed to kill process %s, error: %v", executableName, err.Error())
+		} else {
+			log.Printf("Killed process %s, PID: %v", executableName, pid)
+		}
+	} else {
+		log.Printf("Failed to find process %s with PID: %v, error: %v", executableName, pid, err.Error())
+	}
 }

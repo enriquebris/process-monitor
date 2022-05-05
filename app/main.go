@@ -14,8 +14,12 @@ func main() {
 	monitor := NewMonitor()
 	// add entries
 	for i := 0; i < len(config.Entries); i++ {
-		log.Printf("Adding entry: %s", config.Entries[i].NameRegex)
-		monitor.AddEntry(&config.Entries[i])
+		config.Entries[i].Sanitize()
+		if config.Entries[i].NameRegex != "" && config.Entries[i].Cron != "" {
+			log.Printf("Adding entry: %s", config.Entries[i].NameRegex)
+			monitor.AddEntry(&config.Entries[i])
+		}
+
 	}
 
 	monitor.Start()

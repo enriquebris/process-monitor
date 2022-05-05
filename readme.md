@@ -4,6 +4,18 @@ Monitor all active processes and kill those who match the "*processes*" entry (c
 
 ### configuration file: config.json
 
+#### format
+
+Field | Info                                                                                                              | Default
+--- |-------------------------------------------------------------------------------------------------------------------| ---
+name_regex | regex for process(es) to monitor                                                                                  |
+cron | how often to check                                                                                                |
+cpu_max_limit | max cpu usage in %                                                                                                | 0
+kill_if_cpu_max_limit | whether to kill process(es) if CPU limit is reached (after *total_attempts_before_kill* attempts)                 | false
+kill_if_children_cpu_max_limit | whether to kill the parent process if the sum of children attempts exceeds the *total_attempts_before_kill* limit | false
+total_attempts_before_kill | number of attempts to check before killing process(es) (only if *kill_if_cpu_max_limit* is true)                                       |  0
+
+#### config.json example
 ```json
 {
   "processes": [
