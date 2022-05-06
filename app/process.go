@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// processChecker checks whether a process or processes match the given *MonitorEntry criteria
 func processChecker(me *MonitorEntry) error {
 	// get all running processes
 	processList, err := ps.Processes()
@@ -49,6 +50,10 @@ func processChecker(me *MonitorEntry) error {
 
 				if me.getAttemptsForPID(processList[i].Pid()) > me.TotalAttemptsBeforeKill {
 					if me.KillIfCPUMaxLimit {
+						// kill the process (if it is not the parent process)
+						if processList[i].PPid() != 1 {
+							killProcess(processList[i].Pid(), processList[i].Executable())
+						}
 						// kill the parent process
 						killProcess(parentPID, parentExecutableName)
 
@@ -80,6 +85,7 @@ func processChecker(me *MonitorEntry) error {
 	return nil
 }
 
+// killProcess kills the process with the given PID
 func killProcess(pid int, executableName string) {
 	if process, err := os.FindProcess(pid); err == nil {
 		if err := process.Kill(); err != nil {
